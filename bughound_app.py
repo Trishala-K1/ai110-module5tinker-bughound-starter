@@ -88,7 +88,7 @@ if mode == "Gemini (requires API key)":
 
 model_name = st.sidebar.selectbox(
     "Gemini model",
-    ["gemini-2.5-flash", "gemini-2.5-pro"], # Reverting to existing version names from llm_client.py
+    ["gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-2.5-pro"],
     disabled=(mode != "Gemini (requires API key)"),
 )
 
