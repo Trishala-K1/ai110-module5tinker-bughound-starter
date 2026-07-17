@@ -1,4 +1,17 @@
+import re
 from typing import Dict, List
+
+
+def _return_values(code: str) -> set:
+    """Extracts the literal expression after each `return` keyword.
+
+    This exists because checking for the mere presence of the word `return`
+    (as the existing rule below does) misses cases where a return statement
+    survives but its *value* silently changes -- e.g. `return True` becoming
+    `return None`. That's a real behavior change a caller can trip over, and
+    it's invisible to a simple substring check.
+    """
+    return {m.group(1).strip() for m in re.finditer(r"^\s*return\b(.*)$", code, flags=re.MULTILINE)}
 
 
 def assess_risk(
@@ -61,6 +74,12 @@ def assess_risk(
         # This is usually good, but still risky.
         score -= 5
         reasons.append("Bare except was modified, verify correctness.")
+
+    if _return_values(original_code) != _return_values(fixed_code):
+        score -= 30
+        reasons.append(
+            "Return value(s) changed even though `return` is still present -- verify behavior is preserved."
+        )
 
     # ----------------------------
     # Clamp score

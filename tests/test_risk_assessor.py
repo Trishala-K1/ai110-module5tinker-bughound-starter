@@ -46,3 +46,16 @@ def test_missing_return_is_penalized():
     )
     assert risk["score"] < 100
     assert any("Return" in r or "return" in r for r in risk["reasons"])
+
+
+def test_return_value_change_is_flagged_even_though_return_keyword_remains():
+    # Guardrail: a fix can keep the word "return" present while silently changing
+    # what's returned (e.g. `return True` -> `return None`). The existing
+    # "removed return" check misses this since it only checks for the keyword.
+    # Observed for real on sample_code/print_spam.py in Gemini mode.
+    original = "def greet(name):\n    print('hi')\n    return True\n"
+    fixed = "def greet(name):\n    print('hi')\n    return None\n"
+    risk = assess_risk(original_code=original, fixed_code=fixed, issues=[])
+
+    assert risk["score"] < 100
+    assert any("Return value" in r for r in risk["reasons"])

@@ -128,7 +128,17 @@ class BugHoundAgent:
     def _heuristic_analyze(self, code: str) -> List[Dict[str, str]]:
         issues: List[Dict[str, str]] = []
 
-        if "print(" in code:
+        # Guardrail: strip full-line comments before matching real-code patterns
+        # (print(), bare except:) so commented-out code isn't mistaken for a live
+        # issue -- observed false positive: "# print(...)" inside a comment was
+        # previously flagged and then "fixed" by rewriting the comment text itself.
+        # TODO detection intentionally still scans the full code, since TODOs are
+        # meant to live in comments.
+        executable_lines = "\n".join(
+            line for line in code.splitlines() if not line.strip().startswith("#")
+        )
+
+        if "print(" in executable_lines:
             issues.append(
                 {
                     "type": "Code Quality",
@@ -137,7 +147,7 @@ class BugHoundAgent:
                 }
             )
 
-        if re.search(r"\bexcept\s*:\s*(\n|#|$)", code):
+        if re.search(r"\bexcept\s*:\s*(\n|#|$)", executable_lines):
             issues.append(
                 {
                     "type": "Reliability",
@@ -188,14 +198,26 @@ class BugHoundAgent:
         return None
 
     def _normalize_issues(self, arr: List[Any]) -> List[Dict[str, str]]:
+        # The analyzer prompt asks for "Low" | "Medium" | "High" only, but the model
+        # is not guaranteed to comply (e.g. it may return "Critical" or "Urgent").
+        # risk_assessor only recognizes these three exact values and silently treats
+        # anything else as zero risk -- so an unrecognized severity here would let a
+        # serious issue slip through with no score deduction. Fail cautious instead:
+        # normalize unknown severities to "High" rather than passing them through as-is.
+        valid_severities = {"low", "medium", "high"}
+
         issues: List[Dict[str, str]] = []
         for item in arr:
             if not isinstance(item, dict):
                 continue
+
+            raw_severity = str(item.get("severity", "")).strip()
+            severity = raw_severity if raw_severity.lower() in valid_severities else "High"
+
             issues.append(
                 {
                     "type": str(item.get("type", "Issue")),
-                    "severity": str(item.get("severity", "Unknown")),
+                    "severity": severity,
                     "msg": str(item.get("msg", "")).strip(),
                 }
             )
